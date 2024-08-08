@@ -8,6 +8,178 @@
 using namespace cv;
 using namespace std;
 
+// ![get-psnr]
+double getPSNR(const Mat& I1, const Mat& I2)
+{
+    Mat s1;
+    absdiff(I1, I2, s1);       // |I1 - I2|
+    s1.convertTo(s1, CV_32F);  // cannot make a square on 8 bits
+    s1 = s1.mul(s1);           // |I1 - I2|^2
+
+    Scalar s = sum(s1);        // sum elements per channel
+
+    double sse = s.val[0] + s.val[1] + s.val[2]; // sum channels
+
+    if (sse <= 1e-10) // for small values return zero
+        return 0;
+    else
+    {
+        double mse = sse / (double)(I1.channels() * I1.total());
+        double psnr = 10.0 * log10((255 * 255) / mse);
+        return psnr;
+    }
+}
+// ![get-psnr]
+
+// ![get-mssim]
+
+Scalar getMSSIM(const Mat& i1, const Mat& i2)
+{
+    const double C1 = 6.5025, C2 = 58.5225;
+    /***************************** INITS **********************************/
+    int d = CV_32F;
+
+    Mat I1, I2;
+    i1.convertTo(I1, d);            // cannot calculate on one byte large values
+    i2.convertTo(I2, d);
+
+    Mat I2_2 = I2.mul(I2);        // I2^2
+    Mat I1_2 = I1.mul(I1);        // I1^2
+    Mat I1_I2 = I1.mul(I2);        // I1 * I2
+
+    /*************************** END INITS **********************************/
+
+    Mat mu1, mu2;                   // PRELIMINARY COMPUTING
+    GaussianBlur(I1, mu1, Size(11, 11), 1.5);
+    GaussianBlur(I2, mu2, Size(11, 11), 1.5);
+
+    Mat mu1_2 = mu1.mul(mu1);
+    Mat mu2_2 = mu2.mul(mu2);
+    Mat mu1_mu2 = mu1.mul(mu2);
+
+    Mat sigma1_2, sigma2_2, sigma12;
+
+    GaussianBlur(I1_2, sigma1_2, Size(11, 11), 1.5);
+    sigma1_2 -= mu1_2;
+
+    GaussianBlur(I2_2, sigma2_2, Size(11, 11), 1.5);
+    sigma2_2 -= mu2_2;
+
+    GaussianBlur(I1_I2, sigma12, Size(11, 11), 1.5);
+    sigma12 -= mu1_mu2;
+
+    Mat t1, t2, t3;
+
+    t1 = 2 * mu1_mu2 + C1;
+    t2 = 2 * sigma12 + C2;
+    t3 = t1.mul(t2);                 // t3 = ((2*mu1_mu2 + C1).*(2*sigma12 + C2))
+
+    t1 = mu1_2 + mu2_2 + C1;
+    t2 = sigma1_2 + sigma2_2 + C2;
+    t1 = t1.mul(t2);                 // t1 =((mu1_2 + mu2_2 + C1).*(sigma1_2 + sigma2_2 + C2))
+
+    Mat ssim_map;
+    divide(t3, t1, ssim_map);        // ssim_map =  t3./t1;
+
+    Scalar mssim = mean(ssim_map);   // mssim = average of ssim map
+    return mssim;
+}
+// ![get-mssim]
+
+struct ImageMetrics {
+    double PSNR_channel[3], PSNR_overall;
+    double SSIM_channel[3], SSIM_overall;
+    double Color_MSE, Edge_preservation, Zipper_effect;
+    std::string FileName;
+};
+
+ImageMetrics get_metrics(const Mat& raw_img, const Mat& new_img) {
+    ImageMetrics result;
+
+    // Crop images
+    Mat cropped_raw = raw_img(Range(5, raw_img.rows - 5), Range(5, raw_img.cols - 5));
+    Mat cropped_new = new_img(Range(5, new_img.rows - 5), Range(5, new_img.cols - 5));
+
+    // Split images into channels
+    vector<Mat> channels_raw, channels_new;
+    split(cropped_raw, channels_raw);
+    split(cropped_new, channels_new);
+
+    // PSNR for each channel and overall
+    for (int c = 0; c < 3; ++c) {
+        result.PSNR_channel[c] = getPSNR(channels_raw[c], channels_new[c]);
+    }
+    result.PSNR_overall = getPSNR(cropped_raw, cropped_new);
+
+    // SSIM for each channel and overall
+    for (int c = 0; c < 3; ++c) {
+        result.SSIM_channel[c] = getMSSIM(channels_raw[c], channels_new[c])[0];
+    }
+    result.SSIM_overall = getMSSIM(cropped_raw, cropped_new)[0];
+
+    // Implement SSIM for overall image using getMSSIM directly (assuming data_range is 255)
+    result.SSIM_overall = getMSSIM(cropped_raw, cropped_new)[0];
+
+    // Color accuracy in LAB color space
+    Mat lab_raw, lab_new;
+    cvtColor(cropped_raw, lab_raw, COLOR_BGR2Lab);
+    cvtColor(cropped_new, lab_new, COLOR_BGR2Lab);
+    Mat diff = lab_raw - lab_new;
+    result.Color_MSE = mean(diff.mul(diff))[0];
+
+    // Edge preservation
+    Mat gray_raw, gray_new, edges_raw, edges_new;
+    cvtColor(cropped_raw, gray_raw, COLOR_BGR2GRAY);
+    cvtColor(cropped_new, gray_new, COLOR_BGR2GRAY);
+    Canny(gray_raw, edges_raw, 100, 200);
+    Canny(gray_new, edges_new, 100, 200);
+    result.Edge_preservation = countNonZero(edges_raw & edges_new) / (double)countNonZero(edges_raw | edges_new);
+
+    // Zipper effect detection
+    Mat laplacian;
+    Laplacian(gray_new, laplacian, CV_64F);
+    result.Zipper_effect = norm(laplacian, NORM_L2) / (laplacian.rows * laplacian.cols);
+
+    return result;
+}
+
+void print_metrics(const vector<ImageMetrics>& metrics) {
+    for (size_t i = 0; i < metrics.size(); ++i) {
+        cout << "Image " << metrics[i].FileName << endl;
+        cout << fixed << setprecision(2);
+        cout << "PSNR Channels: " << metrics[i].PSNR_channel[0] << ", " << metrics[i].PSNR_channel[1] << ", " << metrics[i].PSNR_channel[2] << endl;
+        cout << "PSNR Overall: " << metrics[i].PSNR_overall << endl;
+        cout << "SSIM Channels: " << metrics[i].SSIM_channel[0] << ", " << metrics[i].SSIM_channel[1] << ", " << metrics[i].SSIM_channel[2] << endl;
+        cout << "SSIM Overall: " << metrics[i].SSIM_overall << endl;
+        cout << "Color MSE: " << metrics[i].Color_MSE << endl;
+        cout << "Edge Preservation: " << metrics[i].Edge_preservation << endl;
+        cout << "Zipper Effect: " << metrics[i].Zipper_effect << endl;
+        cout << endl;
+    }
+}
+
+void save_metrics_to_csv(const vector<ImageMetrics>& metrics, const string& filename) {
+    ofstream csv_file(filename);
+    if (!csv_file) {
+        cerr << "Error opening CSV file" << endl;
+        return;
+    }
+
+    csv_file << "Image_Index,PSNR_Channel_0,PSNR_Channel_1,PSNR_Channel_2,PSNR_Overall,SSIM_Channel_0,SSIM_Channel_1,SSIM_Channel_2,SSIM_Overall,Color_MSE,Edge_Preservation,Zipper_Effect\n";
+
+    for (size_t i = 0; i < metrics.size(); ++i) {
+        csv_file << metrics[i].FileName << ",";
+        csv_file << fixed << setprecision(2);
+        csv_file << metrics[i].PSNR_channel[0] << "," << metrics[i].PSNR_channel[1] << "," << metrics[i].PSNR_channel[2] << ",";
+        csv_file << metrics[i].PSNR_overall << ",";
+        csv_file << metrics[i].SSIM_channel[0] << "," << metrics[i].SSIM_channel[1] << "," << metrics[i].SSIM_channel[2] << ",";
+        csv_file << metrics[i].SSIM_overall << ",";
+        csv_file << metrics[i].Color_MSE << "," << metrics[i].Edge_preservation << "," << metrics[i].Zipper_effect << endl;
+    }
+
+    csv_file.close();
+}
+
 
 std::string get_filename(const std::string& full_path) {
     size_t last_slash = full_path.find_last_of("/\\");
@@ -232,6 +404,7 @@ int main() {
     string output_folder = "Data/";
 
     vector<string> image_files;
+    vector<ImageMetrics> image_metrices;
     glob(input_folder + "*.*", image_files, false); // Adjust pattern as needed
 
     for (const string& filename : image_files) {
@@ -271,8 +444,16 @@ int main() {
             imwrite(output_filename, image);
 
             cout << "[Success] File Saved: " << output_filename << "\n";
+
+            // Computing Image Metrics:
+            ImageMetrics metrics = get_metrics(image, Demosaiced);
+            metrics.FileName = output_filename;
+            image_metrices.push_back(metrics);
         }
     }
+
+    print_metrics(image_metrices);
+    save_metrics_to_csv(image_metrices, "metrics.csv");
 
     return 0;
 }
