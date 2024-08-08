@@ -3,9 +3,21 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <filesystem>
 
 using namespace cv;
 using namespace std;
+
+
+std::string get_filename(const std::string& full_path) {
+    size_t last_slash = full_path.find_last_of("/\\");
+    if (last_slash != std::string::npos) {
+        return full_path.substr(last_slash + 1);
+    }
+    else {
+        return full_path;
+    }
+}
 
 void save_image(const cv::Mat& image, const std::string& filename) {
     string folderPath = "Data/";
@@ -16,14 +28,14 @@ void save_image(const cv::Mat& image, const std::string& filename) {
     imwrite(imagePath, image);
 
     // Save data to CSV (assuming image is a Mat of CV_8UC3)
-    ofstream csvFile(csvPath);
+    /*ofstream csvFile(csvPath);
     if (csvFile.is_open()) {
         csvFile << format(image, cv::Formatter::FMT_CSV) << endl;
         csvFile.close();
     }
     else {
         cerr << "Error opening CSV file" << endl;
-    }
+    }*/
 }
 
 cv::Mat convolve1d(const cv::Mat& img, const std::vector<float>& kernel) {
@@ -215,26 +227,52 @@ Mat make_bayer(const Mat& img) {
 }
 
 int main() {
-    Mat img = imread("Camera_Test.png", IMREAD_COLOR);
-    if (img.empty()) {
-        cout << "Could not open or find the image" << endl;
-        return -1;
+
+    string input_folder = "Data/input/";
+    string output_folder = "Data/";
+
+    vector<string> image_files;
+    glob(input_folder + "*.*", image_files, false); // Adjust pattern as needed
+
+    for (const string& filename : image_files) {
+        string file_name = get_filename(filename);
+        file_name = file_name.substr(0, file_name.size() - 4);
+
+        Mat img = imread(filename, IMREAD_COLOR);
+        if (img.empty()) {
+            cerr << "Could not open or find the image: " << filename << endl;
+            continue;
+        }
+
+        // Create resized images
+        Mat img_half, img_quarter;
+        resize(img, img_half, Size(img.cols / 2, img.rows / 2),0,0,INTER_CUBIC);
+        resize(img, img_quarter, Size(img.cols / 4, img.rows / 4),0,0, INTER_CUBIC);
+
+        // Process each image (original, half, quarter)
+        for (auto& image : { img, img_half, img_quarter }) {
+            string size_suffix = (image.cols == img.cols) ? "" : to_string(img.cols / image.cols);
+            string output_prefix = output_folder + file_name + "_" + size_suffix;
+
+            cvtColor(image, image, COLOR_BGR2RGB);
+
+            Mat Bayer = make_bayer(image);
+            // save_image(Bayer, output_prefix + "_Bayer.png");
+
+            Mat Demosaiced = Demosaic_DLMMSE(Bayer);
+
+            cvtColor(Demosaiced, Demosaiced, COLOR_RGB2BGR);
+
+            string output_filename = output_prefix + "_DLMMSE.png";
+            imwrite(output_filename, Demosaiced);
+
+            output_filename = output_prefix + "_GT.png";
+            cvtColor(image, image, COLOR_RGB2BGR);
+            imwrite(output_filename, image);
+
+            cout << "[Success] File Saved: " << output_filename << "\n";
+        }
     }
-
-    cvtColor(img, img, COLOR_BGR2RGB);
-
-    Mat Bayer = make_bayer(img);
-
-    save_image(Bayer, "Bayer");
-
-    Mat Demosaiced = Demosaic_DLMMSE(Bayer);
-
-    cvtColor(Demosaiced, Demosaiced, COLOR_RGB2BGR);
-
-    save_image(Demosaiced, "DLMMSE");
-
-    imshow("DLMMSE Image", Demosaiced);
-    waitKey(0);
 
     return 0;
 }
