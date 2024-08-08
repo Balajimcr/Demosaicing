@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\D\Libraries\OpenCV\opencv-master\opencv\install\include;C:\D\Libraries\OpenCV\depends\boost;C:\D\Libraries\OpenCV\depends\eigen-3.4.0;C:\D\Project_Files\Samsung\Research\GDC_HAG_ATF_Algorithm\libInterpolate\install\include</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>opencv_alphamat490.lib;opencv_aruco490.lib;opencv_bgsegm490.lib;opencv_bioinspired490.lib;opencv_calib3d490.lib;opencv_ccalib490.lib;opencv_core490.lib;opencv_datasets490.lib;opencv_dnn490.lib;opencv_dnn_objdetect490.lib;opencv_dnn_superres490.lib;opencv_dpm490.lib;opencv_face490.lib;opencv_features2d490.lib;opencv_flann490.lib;opencv_fuzzy490.lib;opencv_gapi490.lib;opencv_hfs490.lib;opencv_highgui490.lib;opencv_imgcodecs490.lib;opencv_imgproc490.lib;opencv_img_hash490.lib;opencv_intensity_transform490.lib;opencv_line_descriptor490.lib;opencv_mcc490.lib;opencv_ml490.lib;opencv_objdetect490.lib;opencv_optflow490.lib;opencv_phase_unwrapping490.lib;opencv_photo490.lib;opencv_plot490.lib;opencv_quality490.lib;opencv_rapid490.lib;opencv_reg490.lib;opencv_rgbd490.lib;opencv_saliency490.lib;opencv_shape490.lib;opencv_signal490.lib;opencv_stereo490.lib;opencv_stitching490.lib;opencv_structured_light490.lib;opencv_superres490.lib;opencv_surface_matching490.lib;opencv_text490.lib;opencv_tracking490.lib;opencv_video490.lib;opencv_videoio490.lib;opencv_videostab490.lib;opencv_wechat_qrcode490.lib;opencv_xfeatures2d490.lib;opencv_ximgproc490.lib;opencv_xobjdetect490.lib;opencv_xphoto490.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\D\Libraries\OpenCV\opencv-master\opencv\install\x64\vc17\lib</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup />
+</Project>
